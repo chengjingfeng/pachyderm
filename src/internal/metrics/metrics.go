@@ -6,6 +6,7 @@ import (
 
 	"github.com/pachyderm/pachyderm/v2/src/client"
 	"github.com/pachyderm/pachyderm/v2/src/enterprise"
+	"github.com/pachyderm/pachyderm/v2/src/internal/clientsdk"
 	"github.com/pachyderm/pachyderm/v2/src/internal/config"
 	"github.com/pachyderm/pachyderm/v2/src/internal/errors"
 	"github.com/pachyderm/pachyderm/v2/src/internal/serviceenv"
@@ -251,10 +252,17 @@ func internalMetrics(pachClient *client.APIClient, metrics *Metrics) {
 	}
 
 	// Pipeline info
-	resp, err := pachClient.PpsAPIClient.ListPipeline(pachClient.Ctx(), &pps.ListPipelineRequest{AllowIncomplete: true})
-	if err == nil {
-		metrics.Pipelines = int64(len(resp.PipelineInfo)) // Number of pipelines
-		for _, pi := range resp.PipelineInfo {
+	if err := func() error {
+		lpClient, err := pachClient.PpsAPIClient.ListPipeline(pachClient.Ctx(), &pps.ListPipelineRequest{AllowIncomplete: true})
+		if err != nil {
+			return err
+		}
+		pipelineInfos, err := clientsdk.ListPipelineInfo(lpClient)
+		if err != nil {
+			return err
+		}
+		metrics.Pipelines = int64(len(pipelineInfos)) // Number of pipelines
+		for _, pi := range pipelineInfos {
 			if pi.ParallelismSpec != nil {
 				if metrics.MaxParallelism < pi.ParallelismSpec.Constant {
 					metrics.MaxParallelism = pi.ParallelismSpec.Constant
@@ -349,7 +357,8 @@ func internalMetrics(pachClient *client.APIClient, metrics *Metrics) {
 				metrics.CfgTfjob++
 			}
 		}
-	} else {
+		return nil
+	}(); err != nil {
 		log.Errorf("Error getting pipeline metrics: %v", err)
 	}
 

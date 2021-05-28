@@ -292,8 +292,7 @@ func (d *driver) getPermissions(ctx context.Context, repo *pfs.Repo) ([]auth.Per
 	return resp.Permissions, resp.Roles, nil
 }
 
-func (d *driver) listRepo(ctx context.Context, includeAuth bool, repoType string) (*pfs.ListRepoResponse, error) {
-	result := &pfs.ListRepoResponse{}
+func (d *driver) listRepo(ctx context.Context, includeAuth bool, repoType string, fn func(*pfs.RepoInfo) error) error {
 	authSeemsActive := true
 	repoInfo := &pfs.RepoInfo{}
 
@@ -316,7 +315,9 @@ func (d *driver) listRepo(ctx context.Context, includeAuth bool, repoType string
 				return errors.Wrapf(grpcutil.ScrubGRPC(err), "error getting access level for \"%s\"", pretty.CompactPrintRepo(repoInfo.Repo))
 			}
 		}
-		result.RepoInfo = append(result.RepoInfo, proto.Clone(repoInfo).(*pfs.RepoInfo))
+		if err := fn(proto.Clone(repoInfo).(*pfs.RepoInfo)); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -328,10 +329,10 @@ func (d *driver) listRepo(ctx context.Context, includeAuth bool, repoType string
 		err = d.repos.ReadOnly(ctx).GetByIndex(pfsdb.ReposTypeIndex, repoType, repoInfo, col.DefaultOptions(), processFunc)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return result, nil
+	return nil
 }
 
 func (d *driver) deleteRepo(txnCtx *txncontext.TransactionContext, repo *pfs.Repo, force bool) error {
@@ -2085,14 +2086,14 @@ func (d *driver) inspectBranch(txnCtx *txncontext.TransactionContext, branch *pf
 	return result, nil
 }
 
-func (d *driver) listBranch(ctx context.Context, repo *pfs.Repo, reverse bool) ([]*pfs.BranchInfo, error) {
+func (d *driver) listBranch(ctx context.Context, repo *pfs.Repo, reverse bool, cb func(*pfs.BranchInfo) error) error {
 	// Validate arguments
 	if repo == nil {
-		return nil, errors.New("repo cannot be nil")
+		return errors.New("repo cannot be nil")
 	}
 
 	if err := d.env.AuthServer().CheckRepoIsAuthorized(ctx, repo.Name, auth.Permission_REPO_LIST_BRANCH); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Make sure that the repo exists
@@ -2102,20 +2103,24 @@ func (d *driver) listBranch(ctx context.Context, repo *pfs.Repo, reverse bool) (
 			return err
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	var result []*pfs.BranchInfo
 	var bis []*pfs.BranchInfo
-	sendBis := func() {
+	sendBis := func() error {
 		if !reverse {
 			sort.Slice(bis, func(i, j int) bool { return len(bis[i].Provenance) < len(bis[j].Provenance) })
 		} else {
 			sort.Slice(bis, func(i, j int) bool { return len(bis[i].Provenance) > len(bis[j].Provenance) })
 		}
-		result = append(result, bis...)
+		for i := range bis {
+			if err := cb(bis[i]); err != nil {
+				return err
+			}
+		}
 		bis = nil
+		return nil
 	}
 
 	lastRev := int64(-1)
@@ -2135,16 +2140,15 @@ func (d *driver) listBranch(ctx context.Context, repo *pfs.Repo, reverse bool) (
 	}
 	if repo.Name == "" {
 		if err := d.branches.ReadOnly(ctx).ListRev(branchInfo, opts, listCallback); err != nil {
-			return nil, err
+			return err
 		}
 	} else {
 		if err := d.branches.ReadOnly(ctx).GetRevByIndex(pfsdb.BranchesRepoIndex, pfsdb.RepoKey(repo), branchInfo, opts, listCallback); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	sendBis()
-	return result, nil
+	return sendBis()
 }
 
 func (d *driver) deleteBranch(txnCtx *txncontext.TransactionContext, branch *pfs.Branch, force bool) error {
@@ -2247,16 +2251,12 @@ func (d *driver) appendSubvenance(commitInfo *pfs.CommitInfo, subvCommitInfo *pf
 func (d *driver) deleteAll(txnCtx *txncontext.TransactionContext) error {
 	// Note: d.listRepo() doesn't return the 'spec' repo, so it doesn't get
 	// deleted here. Instead, PPS is responsible for deleting and re-creating it
-	repoInfos, err := d.listRepo(txnCtx.ClientContext, !includeAuth, "")
-	if err != nil {
-		return err
-	}
-	for _, repoInfo := range repoInfos.RepoInfo {
+	return d.listRepo(txnCtx.ClientContext, !includeAuth, "", func(repoInfo *pfs.RepoInfo) error {
 		if err := d.deleteRepo(txnCtx, repoInfo.Repo, true); err != nil && !auth.IsErrNotAuthorized(err) {
 			return err
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // TODO: Is this really necessary?
