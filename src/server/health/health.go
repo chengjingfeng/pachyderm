@@ -1,9 +1,7 @@
 package health
 
 import (
-	"github.com/gogo/protobuf/types"
 	"github.com/pachyderm/pachyderm/v2/src/health"
-	"github.com/pachyderm/pachyderm/v2/src/internal/errors"
 	"golang.org/x/net/context"
 )
 
@@ -23,11 +21,17 @@ type healthServer struct {
 }
 
 // Health implements the Health method for healthServer.
-func (h *healthServer) Health(context.Context, *types.Empty) (*types.Empty, error) {
+func (h *healthServer) Check(ctx context.Context, req *health.HealthCheckRequest) (*health.HealthCheckResponse, error) {
+	//TODO: Implement health checking per service, for now global only
+
 	if !h.ready {
-		return nil, errors.Errorf("server not ready")
+		return &health.HealthCheckResponse{
+			Status: health.HealthCheckResponse_NOT_SERVING,
+		}, nil
 	}
-	return &types.Empty{}, nil
+	return &health.HealthCheckResponse{
+		Status: health.HealthCheckResponse_SERVING,
+	}, nil
 }
 
 // Ready tells pachd to start responding positively to Health requests. This
