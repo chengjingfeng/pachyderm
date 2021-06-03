@@ -1,13 +1,13 @@
 package health
 
 import (
-	"github.com/pachyderm/pachyderm/v2/src/health"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // Server adds the Ready method to health.HealthServer.
 type Server interface {
-	health.HealthServer
+	grpc_health_v1.HealthServer
 	Ready()
 }
 
@@ -21,17 +21,24 @@ type healthServer struct {
 }
 
 // Health implements the Health method for healthServer.
-func (h *healthServer) Check(ctx context.Context, req *health.HealthCheckRequest) (*health.HealthCheckResponse, error) {
+func (h *healthServer) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
 	//TODO: Implement health checking per service, for now global only
 
 	if !h.ready {
-		return &health.HealthCheckResponse{
-			Status: health.HealthCheckResponse_NOT_SERVING,
+		return &grpc_health_v1.HealthCheckResponse{
+			Status: grpc_health_v1.HealthCheckResponse_NOT_SERVING,
 		}, nil
 	}
-	return &health.HealthCheckResponse{
-		Status: health.HealthCheckResponse_SERVING,
+	return &grpc_health_v1.HealthCheckResponse{
+		Status: grpc_health_v1.HealthCheckResponse_SERVING,
 	}, nil
+}
+
+func (s *healthServer) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
+
+	return server.Send(&grpc_health_v1.HealthCheckResponse{
+		Status: grpc_health_v1.HealthCheckResponse_SERVING,
+	})
 }
 
 // Ready tells pachd to start responding positively to Health requests. This

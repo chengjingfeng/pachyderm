@@ -14,7 +14,6 @@ import (
 	"github.com/pachyderm/pachyderm/v2/src/client"
 	debugclient "github.com/pachyderm/pachyderm/v2/src/debug"
 	eprsclient "github.com/pachyderm/pachyderm/v2/src/enterprise"
-	healthclient "github.com/pachyderm/pachyderm/v2/src/health"
 	identityclient "github.com/pachyderm/pachyderm/v2/src/identity"
 	"github.com/pachyderm/pachyderm/v2/src/internal/auth"
 	"github.com/pachyderm/pachyderm/v2/src/internal/clusterstate"
@@ -52,6 +51,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 func RunLocal() (retErr error) {
@@ -230,7 +230,7 @@ func RunLocal() (retErr error) {
 		}
 		healthServer := health.NewHealthServer()
 		if err := logGRPCServerSetup("Health", func() error {
-			healthclient.RegisterHealthServer(externalServer.Server, healthServer)
+			grpc_health_v1.RegisterHealthServer(externalServer.Server, healthServer)
 			return nil
 		}); err != nil {
 			return err
@@ -349,7 +349,7 @@ func RunLocal() (retErr error) {
 		}
 		healthServer := health.NewHealthServer()
 		if err := logGRPCServerSetup("Health", func() error {
-			healthclient.RegisterHealthServer(internalServer.Server, healthServer)
+			grpc_health_v1.RegisterHealthServer(internalServer.Server, healthServer)
 			return nil
 		}); err != nil {
 			return err
