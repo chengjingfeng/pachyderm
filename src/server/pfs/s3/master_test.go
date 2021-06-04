@@ -444,7 +444,7 @@ func masterListSystemRepoBuckets(t *testing.T, pachClient *client.APIClient, min
 		} else if bucket.Name == fmt.Sprintf("master.%s.%s", pfs.MetaRepoType, repo) {
 			hasMeta = true
 		} else {
-			require.NotEqual(t, bucket.Name, fmt.Sprintf("master.%s.%s", pfs.MetaRepoType, repo))
+			require.NotEqual(t, bucket.Name, fmt.Sprintf("master.%s.%s", pfs.SpecRepoType, repo))
 		}
 	}
 
@@ -570,7 +570,7 @@ func TestMasterDriver(t *testing.T) {
 		t.Run("ListObjectsRecursive", func(t *testing.T) {
 			masterListObjectsRecursive(t, pachClient, minioClient)
 		})
-		t.Run("ResolveSystemRepoBucket", func(t *testing.T) {
+		t.Run("ListSystemRepoBucket", func(t *testing.T) {
 			masterListSystemRepoBuckets(t, pachClient, minioClient)
 		})
 		t.Run("ResolveSystemRepoBucket", func(t *testing.T) {
